@@ -1,0 +1,38 @@
+services:
+  midjourney-bridge:
+    build: .
+    container_name: midjourney-bridge
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/London
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - DISCORD_USER_TOKEN=${DISCORD_USER_TOKEN}
+      - DISCORD_GUILD_ID=${DISCORD_GUILD_ID}
+      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
+      - API_KEY=${API_KEY}
+      - WEBHOOK_URL=${WEBHOOK_URL:-}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
+      - HOME=/app
+    ports:
+      - 3000:3000
+      - 3002:3002
+    volumes:
+      - ./data:/app/data
+      - /home/claude/Pictures/midjourney:/app/Pictures/midjourney
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.midjourney.rule=Host(`midjourney.lan`)
+      - traefik.http.routers.midjourney.entrypoints=web
+      - traefik.http.routers.midjourney.service=midjourney
+      - traefik.http.services.midjourney.loadbalancer.server.port=3000
+      - traefik.http.routers.midjourney-mcp.rule=Host(`midjourney-mcp.lan`)
+      - traefik.http.routers.midjourney-mcp.entrypoints=web
+      - traefik.http.routers.midjourney-mcp.service=midjourney-mcp
+      - traefik.http.services.midjourney-mcp.loadbalancer.server.port=3002
+    networks:
+      - default
+      - traefik
+
+networks:
+  traefik:
+    external: true
