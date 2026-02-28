@@ -14,14 +14,56 @@ export function createMcpServer(config, { queue, logger }) {
   // Tool: generate_image
   mcp.tool(
     'generate_image',
-    'Generate an image using Midjourney /imagine. Returns a job ID to poll.',
-    { prompt: z.string().describe('The image generation prompt') },
-    async ({ prompt }) => {
+    'Generate an image using Midjourney /imagine. Returns a job ID to poll. Parameters are assembled into the MJ prompt automatically.',
+    {
+      prompt: z.string().describe('The text prompt for image generation'),
+      image_prompts: z.array(z.string().url()).max(5).optional().describe('Image URLs as image prompts (prepended)'),
+      sref: z.array(z.string().url()).max(5).optional().describe('Style reference image URLs'),
+      cref: z.array(z.string().url()).max(5).optional().describe('Character reference image URLs'),
+      ar: z.string().optional().describe('Aspect ratio (e.g. "16:9")'),
+      v: z.string().optional().describe('Model version (e.g. "6.0")'),
+      style: z.string().optional().describe('Style preset (e.g. "raw")'),
+      stylize: z.number().int().min(0).max(1000).optional().describe('Stylization (0-1000)'),
+      chaos: z.number().int().min(0).max(100).optional().describe('Variety (0-100)'),
+      weird: z.number().int().min(0).max(3000).optional().describe('Weirdness (0-3000)'),
+      no: z.string().optional().describe('Negative prompt — things to exclude'),
+      seed: z.number().int().optional().describe('Seed for reproducibility'),
+      tile: z.boolean().optional().describe('Seamless tiling pattern'),
+      iw: z.number().min(0).max(3).optional().describe('Image prompt weight (0-3)'),
+      sw: z.number().int().min(0).max(1000).optional().describe('Style reference weight (0-1000)'),
+      cw: z.number().int().min(0).max(100).optional().describe('Character reference weight (0-100)'),
+      quality: z.number().optional().describe('Quality (0.25, 0.5, 1, 2)'),
+      stop: z.number().int().min(10).max(100).optional().describe('Stop at percentage (10-100)'),
+      p: z.boolean().optional().describe('Enable personalization'),
+    },
+    async (params) => {
+      const parts = [];
+      if (params.image_prompts?.length) parts.push(...params.image_prompts);
+      parts.push(params.prompt);
+      if (params.sref?.length) parts.push(`--sref ${params.sref.join(' ')}`);
+      if (params.cref?.length) parts.push(`--cref ${params.cref.join(' ')}`);
+      if (params.ar) parts.push(`--ar ${params.ar}`);
+      if (params.v) parts.push(`--v ${params.v}`);
+      if (params.style) parts.push(`--style ${params.style}`);
+      if (params.quality != null) parts.push(`--q ${params.quality}`);
+      if (params.stylize != null) parts.push(`--s ${params.stylize}`);
+      if (params.chaos != null) parts.push(`--chaos ${params.chaos}`);
+      if (params.weird != null) parts.push(`--weird ${params.weird}`);
+      if (params.seed != null) parts.push(`--seed ${params.seed}`);
+      if (params.no) parts.push(`--no ${params.no}`);
+      if (params.stop != null) parts.push(`--stop ${params.stop}`);
+      if (params.tile) parts.push('--tile');
+      if (params.iw != null) parts.push(`--iw ${params.iw}`);
+      if (params.sw != null) parts.push(`--sw ${params.sw}`);
+      if (params.cw != null) parts.push(`--cw ${params.cw}`);
+      if (params.p) parts.push('--p');
+      const fullPrompt = parts.join(' ');
+
       const { ulid } = await import('ulid');
       const id = ulid();
-      const job = db.createJob({ id, type: 'imagine', prompt });
+      const job = db.createJob({ id, type: 'imagine', prompt: fullPrompt });
       queue.submit(job);
-      return { content: [{ type: 'text', text: JSON.stringify({ job_id: id, status: 'pending' }) }] };
+      return { content: [{ type: 'text', text: JSON.stringify({ job_id: id, status: 'pending', prompt: fullPrompt }) }] };
     }
   );
 
