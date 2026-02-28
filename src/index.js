@@ -33,13 +33,13 @@ async function main() {
   // 4. Connect Discord client
   logger.info('Connecting to Discord...');
   const discord = createDiscordClient(config, logger);
-  initCommands(config.discord.token);
-  await loginDiscord(discord, config.discord.token);
+  initCommands(config.discord.user_token); // User token for sending interactions as you
+  await loginDiscord(discord, config.discord.token); // Bot token for monitoring
 
-  // 5. Discover Midjourney commands (hardcoded IDs, optionally refreshed via user token)
+  // 5. Discover Midjourney commands (hardcoded IDs, refreshed via user token if available)
   logger.info('Loading Midjourney commands...');
   try {
-    const commands = await discoverCommands(config.discord.guild_id, config.discord.channel_id, config.discord.user_token);
+    const commands = await discoverCommands(config.discord.guild_id, config.discord.channel_id);
     logger.info({ commands: Object.keys(commands) }, 'MJ commands ready');
   } catch (err) {
     logger.warn({ err: err.message }, 'Live discovery failed, using hardcoded command IDs');

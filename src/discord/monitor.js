@@ -34,9 +34,13 @@ export class MessageMonitor extends EventEmitter {
   }
 
   _handleMessage(msg) {
+    this.logger.debug({ author: msg.author?.id, channel: msg.channelId, content: msg.content?.slice(0, 100) }, 'Message received');
+
     // Only process messages from MJ bot in our channel
     if (msg.author?.id !== MJ_BOT_ID) return;
     if (msg.channelId !== this.channelId) return;
+
+    this.logger.info({ messageId: msg.id, content: msg.content?.slice(0, 120), hasAttachments: msg.attachments?.size > 0, hasEmbeds: msg.embeds?.length > 0 }, 'MJ message detected');
 
     const content = msg.content || '';
     const messageId = msg.id;

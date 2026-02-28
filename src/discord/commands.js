@@ -1,6 +1,5 @@
-import { REST } from 'discord.js';
-
 const MJ_BOT_ID = '936929561302675456';
+const DISCORD_API = 'https://discord.com/api/v9';
 
 // Hardcoded known MJ command data — IDs are stable snowflakes,
 // versions change when MJ updates command definitions.
@@ -52,25 +51,47 @@ const KNOWN_COMMANDS = {
 };
 
 let commandCache = { ...KNOWN_COMMANDS };
-let rest;
+let userToken;
 
 export function initCommands(token) {
-  rest = new REST({ version: '10' }).setToken(token);
+  userToken = token;
+}
+
+/**
+ * Send a raw interaction to Discord as the user.
+ * All interactions must be sent with the user token so MJ treats them
+ * as coming from a real user account.
+ */
+async function sendInteraction(payload) {
+  if (!userToken) throw new Error('User token not configured — required to send MJ commands');
+
+  const resp = await fetch(`${DISCORD_API}/interactions`, {
+    method: 'POST',
+    headers: {
+      'authorization': userToken,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`Discord interaction failed: ${resp.status} ${text}`);
+  }
 }
 
 /**
  * Discover Midjourney's slash command IDs.
- * Uses a Discord user token to fetch live command data (versions may change).
- * Falls back to hardcoded values if no user token is configured.
+ * Uses the user token to fetch live command data (versions may change).
+ * Falls back to hardcoded values if discovery fails.
  */
-export async function discoverCommands(guildId, channelId, userToken) {
+export async function discoverCommands(guildId, channelId) {
   if (!userToken) {
-    return commandCache; // use hardcoded defaults
+    return commandCache;
   }
 
-  // User token discovery — the only way to get fresh version IDs
   try {
-    const resp = await fetch(`https://discord.com/api/v9/guilds/${guildId}/application-command-index`, {
+    const resp = await fetch(`${DISCORD_API}/guilds/${guildId}/application-command-index`, {
       headers: { authorization: userToken },
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -88,7 +109,6 @@ export async function discoverCommands(guildId, channelId, userToken) {
       };
     }
   } catch (err) {
-    // Fall back to hardcoded — still functional, may break if MJ updates versions
     throw new Error(`Live discovery failed (using hardcoded): ${err.message}`);
   }
 
@@ -100,7 +120,7 @@ export function getCommandCache() {
 }
 
 /**
- * Send /imagine command to Midjourney bot.
+ * Send /imagine command as the user.
  */
 export async function sendImagine(guildId, channelId, prompt, sessionId) {
   const cmd = commandCache.imagine;
@@ -108,8 +128,8 @@ export async function sendImagine(guildId, channelId, prompt, sessionId) {
 
   const nonce = generateNonce();
 
-  const payload = {
-    type: 2, // APPLICATION_COMMAND
+  await sendInteraction({
+    type: 2,
     application_id: MJ_BOT_ID,
     guild_id: guildId,
     channel_id: channelId,
@@ -132,14 +152,13 @@ export async function sendImagine(guildId, channelId, prompt, sessionId) {
       attachments: [],
     },
     nonce,
-  };
+  });
 
-  await rest.post('/interactions', { body: payload });
   return nonce;
 }
 
 /**
- * Send /describe command to Midjourney bot.
+ * Send /describe command as the user.
  */
 export async function sendDescribe(guildId, channelId, imageUrl, sessionId) {
   const cmd = commandCache.describe;
@@ -147,7 +166,7 @@ export async function sendDescribe(guildId, channelId, imageUrl, sessionId) {
 
   const nonce = generateNonce();
 
-  const payload = {
+  await sendInteraction({
     type: 2,
     application_id: MJ_BOT_ID,
     guild_id: guildId,
@@ -171,33 +190,31 @@ export async function sendDescribe(guildId, channelId, imageUrl, sessionId) {
       attachments: [],
     },
     nonce,
-  };
+  });
 
-  await rest.post('/interactions', { body: payload });
   return nonce;
 }
 
 /**
- * Click a button (upscale/variation) on a Midjourney message.
+ * Click a button (upscale/variation) on a Midjourney message, as the user.
  */
 export async function clickButton(guildId, channelId, messageId, customId, sessionId) {
   const nonce = generateNonce();
 
-  const payload = {
-    type: 3, // MESSAGE_COMPONENT
+  await sendInteraction({
+    type: 3,
     application_id: MJ_BOT_ID,
     guild_id: guildId,
     channel_id: channelId,
     message_id: messageId,
     session_id: sessionId || generateSessionId(),
     data: {
-      component_type: 2, // Button
+      component_type: 2,
       custom_id: customId,
     },
     nonce,
-  };
+  });
 
-  await rest.post('/interactions', { body: payload });
   return nonce;
 }
 
