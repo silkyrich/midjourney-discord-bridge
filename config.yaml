@@ -1,0 +1,34 @@
+discord:
+  token: ${DISCORD_TOKEN}
+  user_token: ${DISCORD_USER_TOKEN}
+  guild_id: ${DISCORD_GUILD_ID}
+  channel_id: ${DISCORD_CHANNEL_ID}
+  midjourney_bot_id: "936929561302675456"
+
+api:
+  port: 3000
+  host: "0.0.0.0"
+  api_key: ${API_KEY}
+
+mcp:
+  port: 3002
+  host: "0.0.0.0"
+
+queue:
+  max_concurrent: 3
+  job_timeout_ms: 600000
+  correlation_window_ms: 600000
+
+storage:
+  image_dir: "${HOME}/Pictures/midjourney"
+  database_path: "./data/midjourney.db"
+  retention_days: 30
+
+webhooks:
+  url: ${WEBHOOK_URL}
+  secret: ${WEBHOOK_SECRET}
+  retry_attempts: 3
+  retry_delay_ms: 1000
+
+logging:
+  level: "info"
