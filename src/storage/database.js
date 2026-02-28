@@ -48,8 +48,53 @@ export async function initDatabase(path) {
   }
 
   db.run(SCHEMA);
+  migrate(db);
   persist();
   return db;
+}
+
+/**
+ * Migrate existing databases: recreate table if CHECK constraint is outdated.
+ */
+function migrate(database) {
+  const stmt = database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='jobs'");
+  if (!stmt.step()) { stmt.free(); return; }
+  const createSql = stmt.getAsObject().sql;
+  stmt.free();
+
+  // If the table already has the new types, no migration needed
+  if (createSql.includes("'action'")) return;
+
+  // Recreate with updated CHECK constraint
+  database.run(`
+    CREATE TABLE jobs_new (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL CHECK(type IN ('imagine', 'upscale', 'variation', 'describe', 'blend', 'shorten', 'action')),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'queued', 'in_progress', 'completed', 'failed')),
+      prompt TEXT,
+      parameters TEXT,
+      parent_job_id TEXT,
+      discord_message_id TEXT,
+      discord_interaction_id TEXT,
+      image_url TEXT,
+      local_image_path TEXT,
+      progress INTEGER DEFAULT 0,
+      error TEXT,
+      result TEXT,
+      webhook_url TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT
+    );
+    INSERT INTO jobs_new SELECT * FROM jobs;
+    DROP TABLE jobs;
+    ALTER TABLE jobs_new RENAME TO jobs;
+    CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+    CREATE INDEX IF NOT EXISTS idx_jobs_type ON jobs(type);
+    CREATE INDEX IF NOT EXISTS idx_jobs_discord_message_id ON jobs(discord_message_id);
+    CREATE INDEX IF NOT EXISTS idx_jobs_parent_job_id ON jobs(parent_job_id);
+    CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);
+  `);
 }
 
 function persist() {
