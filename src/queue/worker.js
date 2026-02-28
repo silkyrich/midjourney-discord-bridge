@@ -104,6 +104,44 @@ export class Worker {
         break;
       }
 
+      case 'blend': {
+        const imageUrls = job.parameters?.image_urls;
+        if (!imageUrls || imageUrls.length < 2) throw new Error('Blend requires at least 2 image URLs');
+
+        this.logger.info({ jobId: job.id, count: imageUrls.length }, 'Sending /blend');
+        const nonce = await commands.sendBlend(guildId, channelId, imageUrls, job.parameters?.dimension);
+        this.queue.registerNonce(nonce, job.id);
+        break;
+      }
+
+      case 'shorten': {
+        if (!job.prompt) throw new Error('Prompt not specified for shorten');
+
+        this.logger.info({ jobId: job.id }, 'Sending /shorten');
+        const nonce = await commands.sendShorten(guildId, channelId, job.prompt);
+        this.queue.registerNonce(nonce, job.id);
+        break;
+      }
+
+      case 'action': {
+        const parentJob = db.getJob(job.parent_job_id);
+        if (!parentJob) throw new Error('Parent job not found');
+        if (!parentJob.discord_message_id) throw new Error('Parent job has no discord message');
+
+        const action = job.parameters?.action;
+        if (!action) throw new Error('Action not specified');
+
+        const buttons = parentJob.result?.buttons || {};
+        const customId = buttons[action];
+        if (!customId) throw new Error(`Action button '${action}' not found on parent job`);
+
+        this.logger.info({ jobId: job.id, action, parentId: parentJob.id }, 'Clicking action button');
+        const nonce = await commands.clickButton(guildId, channelId, parentJob.discord_message_id, customId);
+        this.queue.registerNonce(nonce, job.id);
+        this.queue.registerMessage(parentJob.discord_message_id, job.id);
+        break;
+      }
+
       default:
         throw new Error(`Unknown job type: ${job.type}`);
     }
