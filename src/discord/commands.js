@@ -196,6 +196,93 @@ export async function sendDescribe(guildId, channelId, imageUrl, sessionId) {
 }
 
 /**
+ * Send /blend command as the user.
+ * Blend accepts 2-5 image URLs.
+ */
+export async function sendBlend(guildId, channelId, imageUrls, dimension, sessionId) {
+  const cmd = commandCache.blend;
+  if (!cmd) throw new Error('blend command not available');
+
+  const nonce = generateNonce();
+
+  // Build options: image1..image5 (at least 2 required)
+  const options = imageUrls.slice(0, 5).map((url, i) => ({
+    type: 11, // ATTACHMENT type
+    name: `image${i + 1}`,
+    value: url,
+  }));
+
+  // Optional dimension parameter (portrait, square, landscape)
+  if (dimension) {
+    options.push({ type: 3, name: 'dimensions', value: dimension });
+  }
+
+  await sendInteraction({
+    type: 2,
+    application_id: MJ_BOT_ID,
+    guild_id: guildId,
+    channel_id: channelId,
+    session_id: sessionId || generateSessionId(),
+    data: {
+      version: cmd.version,
+      id: cmd.id,
+      name: 'blend',
+      type: 1,
+      options,
+      application_command: {
+        id: cmd.id,
+        application_id: MJ_BOT_ID,
+        version: cmd.version,
+        type: 1,
+        name: 'blend',
+        description: 'Blend images together',
+      },
+      attachments: [],
+    },
+    nonce,
+  });
+
+  return nonce;
+}
+
+/**
+ * Send /shorten command as the user.
+ */
+export async function sendShorten(guildId, channelId, prompt, sessionId) {
+  const cmd = commandCache.shorten;
+  if (!cmd) throw new Error('shorten command not available');
+
+  const nonce = generateNonce();
+
+  await sendInteraction({
+    type: 2,
+    application_id: MJ_BOT_ID,
+    guild_id: guildId,
+    channel_id: channelId,
+    session_id: sessionId || generateSessionId(),
+    data: {
+      version: cmd.version,
+      id: cmd.id,
+      name: 'shorten',
+      type: 1,
+      options: [{ type: 3, name: 'prompt', value: prompt }],
+      application_command: {
+        id: cmd.id,
+        application_id: MJ_BOT_ID,
+        version: cmd.version,
+        type: 1,
+        name: 'shorten',
+        description: 'Shorten a prompt',
+      },
+      attachments: [],
+    },
+    nonce,
+  });
+
+  return nonce;
+}
+
+/**
  * Click a button (upscale/variation) on a Midjourney message, as the user.
  */
 export async function clickButton(guildId, channelId, messageId, customId, sessionId) {

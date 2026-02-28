@@ -8,7 +8,7 @@ let dbPath;
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,
-  type TEXT NOT NULL CHECK(type IN ('imagine', 'upscale', 'variation', 'describe')),
+  type TEXT NOT NULL CHECK(type IN ('imagine', 'upscale', 'variation', 'describe', 'blend', 'shorten', 'action')),
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'queued', 'in_progress', 'completed', 'failed')),
   prompt TEXT,
   parameters TEXT,

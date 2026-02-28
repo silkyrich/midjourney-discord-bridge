@@ -81,6 +81,69 @@ export function createMcpServer(config, { queue, logger }) {
     }
   );
 
+  // Tool: blend_images
+  mcp.tool(
+    'blend_images',
+    'Blend 2-5 images together using Midjourney /blend.',
+    {
+      image_urls: z.array(z.string().url()).min(2).max(5).describe('URLs of images to blend (2-5)'),
+      dimension: z.enum(['portrait', 'square', 'landscape']).optional().describe('Output dimension'),
+    },
+    async ({ image_urls, dimension }) => {
+      const { ulid } = await import('ulid');
+      const id = ulid();
+      const job = db.createJob({ id, type: 'blend', parameters: { image_urls, dimension } });
+      queue.submit(job);
+      return { content: [{ type: 'text', text: JSON.stringify({ job_id: id, status: 'pending' }) }] };
+    }
+  );
+
+  // Tool: shorten_prompt
+  mcp.tool(
+    'shorten_prompt',
+    'Use Midjourney /shorten to analyze and shorten a prompt.',
+    { prompt: z.string().describe('The prompt to shorten') },
+    async ({ prompt }) => {
+      const { ulid } = await import('ulid');
+      const id = ulid();
+      const job = db.createJob({ id, type: 'shorten', prompt });
+      queue.submit(job);
+      return { content: [{ type: 'text', text: JSON.stringify({ job_id: id, status: 'pending' }) }] };
+    }
+  );
+
+  // Tool: perform_action
+  mcp.tool(
+    'perform_action',
+    'Perform an action on a completed job (vary, zoom, pan, upscale creative/subtle, reroll).',
+    {
+      job_id: z.string().describe('The completed job ID'),
+      action: z.enum([
+        'reroll', 'vary_strong', 'vary_subtle', 'vary_region',
+        'upscale_subtle', 'upscale_creative', 'upscale_2x', 'upscale_4x',
+        'zoom_out_2x', 'zoom_out_1_5x', 'custom_zoom',
+        'pan_left', 'pan_right', 'pan_up', 'pan_down', 'make_square',
+      ]).describe('The action to perform'),
+    },
+    async ({ job_id, action }) => {
+      const parentJob = db.getJob(job_id);
+      if (!parentJob) return { content: [{ type: 'text', text: 'Error: parent job not found' }], isError: true };
+      if (parentJob.status !== 'completed') return { content: [{ type: 'text', text: 'Error: parent job not completed' }], isError: true };
+
+      const buttons = parentJob.result?.buttons || {};
+      if (!buttons[action]) {
+        const available = Object.keys(buttons).join(', ');
+        return { content: [{ type: 'text', text: `Error: action '${action}' not available. Available: ${available}` }], isError: true };
+      }
+
+      const { ulid } = await import('ulid');
+      const id = ulid();
+      const job = db.createJob({ id, type: 'action', prompt: parentJob.prompt, parameters: { action }, parent_job_id: job_id });
+      queue.submit(job);
+      return { content: [{ type: 'text', text: JSON.stringify({ job_id: id, status: 'pending' }) }] };
+    }
+  );
+
   // Tool: get_job_status
   mcp.tool(
     'get_job_status',

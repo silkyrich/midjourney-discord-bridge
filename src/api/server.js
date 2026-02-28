@@ -10,6 +10,9 @@ import { upscaleRoutes } from './routes/upscale.js';
 import { variationRoutes } from './routes/variation.js';
 import { describeRoutes } from './routes/describe.js';
 import { jobsRoutes } from './routes/jobs.js';
+import { blendRoutes } from './routes/blend.js';
+import { shortenRoutes } from './routes/shorten.js';
+import { actionRoutes } from './routes/action.js';
 
 export async function createApiServer(config, { logger, discord, queue }) {
   const app = Fastify({
@@ -36,6 +39,9 @@ export async function createApiServer(config, { logger, discord, queue }) {
   await app.register(upscaleRoutes, { prefix: '/api', queue });
   await app.register(variationRoutes, { prefix: '/api', queue });
   await app.register(describeRoutes, { prefix: '/api', queue });
+  await app.register(blendRoutes, { prefix: '/api', queue });
+  await app.register(shortenRoutes, { prefix: '/api', queue });
+  await app.register(actionRoutes, { prefix: '/api', queue });
   await app.register(jobsRoutes, { prefix: '/api', config });
 
   return app;
