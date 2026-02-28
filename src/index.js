@@ -54,6 +54,7 @@ async function main() {
   monitor.on('job:complete', (data) => queue.handleComplete(data));
   monitor.on('job:error', (data) => queue.handleError(data));
   monitor.on('job:describe', (data) => queue.handleDescribe(data));
+  monitor.on('job:shorten', (data) => queue.handleShorten(data));
 
   // Wire queue events to webhooks + image download
   queue.on('job:completed', async ({ job }) => {

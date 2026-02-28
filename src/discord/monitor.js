@@ -68,6 +68,17 @@ export class MessageMonitor extends EventEmitter {
       return;
     }
 
+    // Check for shorten results (embeds with shortened prompts)
+    if (msg.embeds?.length > 0 && this._isShortenResult(msg)) {
+      const shortened = this._extractShortenResult(msg);
+      this.emit('job:shorten', {
+        messageId,
+        shortened,
+        message: msg,
+      });
+      return;
+    }
+
     // Check for progress (e.g., "(42%)")
     const progress = this._extractProgress(content);
     const prompt = this._extractPrompt(content);
@@ -111,6 +122,24 @@ export class MessageMonitor extends EventEmitter {
 
   _isDescribeResult(msg) {
     return msg.embeds.some(e => e.description?.includes('1️⃣') || e.title?.toLowerCase().includes('describe'));
+  }
+
+  _isShortenResult(msg) {
+    return msg.embeds.some(e =>
+      e.title?.toLowerCase().includes('shorten') ||
+      e.description?.includes('Important tokens') ||
+      e.description?.includes('Shortened prompts')
+    );
+  }
+
+  _extractShortenResult(msg) {
+    const result = { original: null, suggestions: [], tokens: [] };
+    for (const embed of msg.embeds) {
+      const desc = embed.description || '';
+      // Extract suggestions and token analysis from the embed
+      result.suggestions.push(desc);
+    }
+    return result;
   }
 
   _extractDescriptions(msg) {

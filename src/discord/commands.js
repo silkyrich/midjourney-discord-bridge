@@ -30,9 +30,10 @@ const KNOWN_COMMANDS = {
   shorten: {
     id: '1121575372539039774',
     application_id: MJ_BOT_ID,
-    version: '1237876415471554626',
+    version: '1247736572414001223',
     name: 'shorten',
     type: 1,
+    options: [{ type: 3, name: 'prompt', description: 'The prompt to shorten', required: true }],
   },
   info: {
     id: '972289487818334209',
@@ -91,22 +92,24 @@ export async function discoverCommands(guildId, channelId) {
   }
 
   try {
-    const resp = await fetch(`${DISCORD_API}/guilds/${guildId}/application-command-index`, {
-      headers: { authorization: userToken },
-    });
+    // Fetch global application commands (most reliable source of versions)
+    const resp = await fetch(
+      `${DISCORD_API}/applications/${MJ_BOT_ID}/commands`,
+      { headers: { authorization: userToken } }
+    );
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    const commands = data.application_commands || [];
-    for (const cmd of commands) {
-      if (cmd.application_id !== MJ_BOT_ID) continue;
-      commandCache[cmd.name] = {
-        id: cmd.id,
-        application_id: cmd.application_id,
-        version: cmd.version,
-        name: cmd.name,
-        type: cmd.type,
-        options: cmd.options,
-      };
+    const commands = await resp.json();
+    if (Array.isArray(commands)) {
+      for (const cmd of commands) {
+        commandCache[cmd.name] = {
+          id: cmd.id,
+          application_id: cmd.application_id,
+          version: cmd.version,
+          name: cmd.name,
+          type: cmd.type,
+          options: cmd.options,
+        };
+      }
     }
   } catch (err) {
     throw new Error(`Live discovery failed (using hardcoded): ${err.message}`);
@@ -197,27 +200,53 @@ export async function sendDescribe(guildId, channelId, imageUrl, sessionId) {
 
 /**
  * Send /blend command as the user.
- * Blend accepts 2-5 image URLs.
+ * Blend accepts 2-5 image URLs. Images are downloaded and uploaded as attachments.
  */
 export async function sendBlend(guildId, channelId, imageUrls, dimension, sessionId) {
   const cmd = commandCache.blend;
   if (!cmd) throw new Error('blend command not available');
+  if (!userToken) throw new Error('User token not configured');
 
   const nonce = generateNonce();
 
-  // Build options: image1..image5 (at least 2 required)
-  const options = imageUrls.slice(0, 5).map((url, i) => ({
-    type: 11, // ATTACHMENT type
-    name: `image${i + 1}`,
-    value: url,
-  }));
+  // Download images and build multipart form data
+  const formData = new FormData();
 
-  // Optional dimension parameter (portrait, square, landscape)
-  if (dimension) {
-    options.push({ type: 3, name: 'dimensions', value: dimension });
+  const attachments = [];
+  const options = [];
+
+  for (let i = 0; i < Math.min(imageUrls.length, 5); i++) {
+    const imgResp = await fetch(imageUrls[i]);
+    if (!imgResp.ok) throw new Error(`Failed to download image ${i + 1}: ${imgResp.status}`);
+    const blob = await imgResp.blob();
+    const ext = imageUrls[i].match(/\.(\w+)(?:\?|$)/)?.[1] || 'png';
+    const filename = `image${i + 1}.${ext}`;
+
+    attachments.push({
+      id: String(i),
+      filename,
+      uploaded_filename: filename,
+    });
+
+    options.push({
+      type: 11,
+      name: `image${i + 1}`,
+      value: i, // Reference attachment by index
+    });
+
+    formData.append(`files[${i}]`, blob, filename);
   }
 
-  await sendInteraction({
+  if (dimension) {
+    const dimensionMap = {
+      portrait: '--ar 2:3',
+      square: '--ar 1:1',
+      landscape: '--ar 3:2',
+    };
+    options.push({ type: 3, name: 'dimensions', value: dimensionMap[dimension] || dimension });
+  }
+
+  const payload = {
     type: 2,
     application_id: MJ_BOT_ID,
     guild_id: guildId,
@@ -237,10 +266,23 @@ export async function sendBlend(guildId, channelId, imageUrls, dimension, sessio
         name: 'blend',
         description: 'Blend images together',
       },
-      attachments: [],
+      attachments,
     },
     nonce,
+  };
+
+  formData.append('payload_json', JSON.stringify(payload));
+
+  const resp = await fetch(`${DISCORD_API}/interactions`, {
+    method: 'POST',
+    headers: { authorization: userToken },
+    body: formData,
   });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`Discord interaction failed: ${resp.status} ${text}`);
+  }
 
   return nonce;
 }

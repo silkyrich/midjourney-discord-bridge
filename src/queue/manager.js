@@ -174,6 +174,25 @@ export class QueueManager extends EventEmitter {
   }
 
   /**
+   * Handle shorten result from monitor.
+   */
+  handleShorten({ messageId, shortened }) {
+    const pendingShorten = db.listJobs({ type: 'shorten', status: 'in_progress', limit: 1 });
+    if (pendingShorten.length === 0) return;
+
+    const jobId = pendingShorten[0].id;
+    const job = db.updateJob(jobId, {
+      status: 'completed',
+      progress: 100,
+      discord_message_id: messageId,
+      result: shortened,
+    });
+
+    this._finishJob(jobId);
+    this.emit('job:completed', { job });
+  }
+
+  /**
    * Handle upscale/variation completion — correlated by parent discord message.
    */
   handleUpscaleVariationComplete({ messageId, imageUrl, parentMessageId }) {
