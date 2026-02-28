@@ -244,25 +244,45 @@ export function createMcpServer(config, { queue, logger }) {
 /**
  * Create Express app for MCP transport.
  */
-export function createMcpApp(mcpServer, logger) {
+export function createMcpApp(mcpServerFactory, logger) {
   const app = express();
+  app.use(express.json());
 
   // Map to track transports by session ID
   const transports = new Map();
 
   app.post('/mcp', async (req, res) => {
     try {
+      // Check for existing session
+      const sessionId = req.headers['mcp-session-id'];
+      if (sessionId && transports.has(sessionId)) {
+        const transport = transports.get(sessionId);
+        await transport.handleRequest(req, res, req.body);
+        return;
+      }
+
+      // New session — create fresh server instance + transport
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
       });
-      transports.set(transport.sessionId, transport);
-      await mcpServer.connect(transport);
 
+      // Register transport AFTER session ID is assigned (inside handleRequest)
       transport.onclose = () => {
-        transports.delete(transport.sessionId);
+        if (transport.sessionId) {
+          transports.delete(transport.sessionId);
+        }
       };
 
+      const serverInstance = mcpServerFactory();
+      await serverInstance.connect(transport);
+
+      // Handle the initialize request — this assigns the session ID
       await transport.handleRequest(req, res, req.body);
+
+      // NOW the session ID is available, register it
+      if (transport.sessionId) {
+        transports.set(transport.sessionId, transport);
+      }
     } catch (err) {
       logger.error({ err }, 'MCP request error');
       if (!res.headersSent) {
