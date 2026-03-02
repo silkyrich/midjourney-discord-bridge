@@ -44,6 +44,7 @@ export class MessageMonitor extends EventEmitter {
 
     const content = msg.content || '';
     const messageId = msg.id;
+    const referenceMessageId = msg.reference?.messageId || null;
 
     // Check for error messages
     if (this._isError(content)) {
@@ -51,6 +52,7 @@ export class MessageMonitor extends EventEmitter {
       this.emit('job:error', {
         prompt,
         messageId,
+        referenceMessageId,
         error: content,
         message: msg,
       });
@@ -88,6 +90,7 @@ export class MessageMonitor extends EventEmitter {
         prompt,
         progress,
         messageId,
+        referenceMessageId,
         message: msg,
       });
       return;
@@ -99,6 +102,7 @@ export class MessageMonitor extends EventEmitter {
       this.emit('job:complete', {
         prompt,
         messageId,
+        referenceMessageId,
         imageUrl,
         message: msg,
         components: msg.components || [],

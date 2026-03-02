@@ -20,7 +20,7 @@ export class QueueManager extends EventEmitter {
     this.logger = logger;
 
     // Correlation maps
-    // prompt -> Job[] (FIFO) for imagine jobs
+    // prompt -> Job[] (FIFO) for all jobs with prompts
     this.promptMap = new Map();
     // discord_message_id -> job_id for upscale/variation correlation
     this.messageMap = new Map();
@@ -49,8 +49,8 @@ export class QueueManager extends EventEmitter {
   submit(job) {
     this.pendingQueue.push(job.id);
 
-    // Register in correlation maps
-    if (job.type === 'imagine' && job.prompt) {
+    // Register in correlation maps (all job types with prompts, not just imagine)
+    if (job.prompt) {
       const key = normalizePrompt(job.prompt);
       if (!this.promptMap.has(key)) this.promptMap.set(key, []);
       this.promptMap.get(key).push(job.id);
@@ -99,8 +99,8 @@ export class QueueManager extends EventEmitter {
   /**
    * Handle progress update from monitor.
    */
-  handleProgress({ prompt, progress, messageId }) {
-    const jobId = this._findJobByPrompt(prompt) || this.messageMap.get(messageId);
+  handleProgress({ prompt, progress, messageId, referenceMessageId }) {
+    const jobId = this._findJobByPrompt(prompt) || this.messageMap.get(messageId) || this.messageMap.get(referenceMessageId);
     if (!jobId) return;
 
     // Register message mapping if not already known
@@ -115,8 +115,8 @@ export class QueueManager extends EventEmitter {
   /**
    * Handle completion from monitor.
    */
-  handleComplete({ prompt, messageId, imageUrl, components }) {
-    const jobId = this._findJobByPrompt(prompt) || this.messageMap.get(messageId);
+  handleComplete({ prompt, messageId, imageUrl, components, referenceMessageId }) {
+    const jobId = this._findJobByPrompt(prompt) || this.messageMap.get(messageId) || this.messageMap.get(referenceMessageId);
     if (!jobId) {
       this.logger.warn({ prompt, messageId }, 'Completed message with no matching job');
       return;
@@ -140,8 +140,8 @@ export class QueueManager extends EventEmitter {
   /**
    * Handle error from monitor.
    */
-  handleError({ prompt, messageId, error }) {
-    const jobId = this._findJobByPrompt(prompt) || this.messageMap.get(messageId);
+  handleError({ prompt, messageId, error, referenceMessageId }) {
+    const jobId = this._findJobByPrompt(prompt) || this.messageMap.get(messageId) || this.messageMap.get(referenceMessageId);
     if (!jobId) return;
 
     const job = db.updateJob(jobId, {
