@@ -4,12 +4,60 @@ import { z } from 'zod';
 import express from 'express';
 import { randomUUID } from 'node:crypto';
 import * as db from '../storage/database.js';
+import { resolve } from 'node:path';
+import { readFileSync, existsSync } from 'node:fs';
 
 export function createMcpServer(config, { queue, logger }) {
   const mcp = new McpServer(
     { name: 'midjourney-bridge', version: '1.0.0' },
     { capabilities: { tools: {} } }
   );
+  /**
+   * Build MCP response content for a completed job, including inline image if available.
+   */
+  async function jobResultContent(job) {
+    const content = [];
+
+    // Try to include inline image for completed jobs
+    if (job.status === 'completed' && job.image_url) {
+      try {
+        let imageData;
+        const imageDir = config.storage?.image_dir?.replace('${HOME}', process.env.HOME || '/app') || '/app/Pictures/midjourney';
+
+        // Try local file first
+        if (job.local_image_path) {
+          const localPath = resolve(imageDir, job.local_image_path);
+          if (existsSync(localPath)) {
+            imageData = readFileSync(localPath);
+          }
+        }
+
+        // Fall back to fetching from Discord CDN
+        if (!imageData && job.image_url) {
+          const resp = await fetch(job.image_url);
+          if (resp.ok) {
+            imageData = Buffer.from(await resp.arrayBuffer());
+          }
+        }
+
+        if (imageData) {
+          const base64 = imageData.toString('base64');
+          const mimeType = job.image_url.includes('.webp') ? 'image/webp'
+            : job.image_url.includes('.jpg') || job.image_url.includes('.jpeg') ? 'image/jpeg'
+            : 'image/png';
+          content.push({ type: 'image', data: base64, mimeType });
+        }
+      } catch {
+        // Image fetch failed, just return text
+      }
+    }
+
+    // Always include job metadata as text
+    content.push({ type: 'text', text: JSON.stringify(job) });
+    return content;
+  }
+
+
 
   // Tool: generate_image
   mcp.tool(
@@ -194,7 +242,7 @@ export function createMcpServer(config, { queue, logger }) {
     async ({ job_id }) => {
       const job = db.getJob(job_id);
       if (!job) return { content: [{ type: 'text', text: 'Error: job not found' }], isError: true };
-      return { content: [{ type: 'text', text: JSON.stringify(job) }] };
+      return { content: await jobResultContent(job) };
     }
   );
 
@@ -228,13 +276,13 @@ export function createMcpServer(config, { queue, logger }) {
         const job = db.getJob(job_id);
         if (!job) return { content: [{ type: 'text', text: 'Error: job not found' }], isError: true };
         if (job.status === 'completed' || job.status === 'failed') {
-          return { content: [{ type: 'text', text: JSON.stringify(job) }] };
+          return { content: await jobResultContent(job) };
         }
         await new Promise(r => setTimeout(r, 2000));
       }
 
       const job = db.getJob(job_id);
-      return { content: [{ type: 'text', text: JSON.stringify({ ...job, _timeout: true }) }] };
+      return { content: await jobResultContent({ ...job, _timeout: true }) };
     }
   );
 
@@ -258,6 +306,16 @@ export function createMcpApp(mcpServerFactory, logger) {
       if (sessionId && transports.has(sessionId)) {
         const transport = transports.get(sessionId);
         await transport.handleRequest(req, res, req.body);
+        return;
+      }
+
+      // Stale session — tell client to re-initialize
+      if (sessionId && !transports.has(sessionId)) {
+        res.status(404).json({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Session not found. Please re-initialize.' },
+          id: null,
+        });
         return;
       }
 

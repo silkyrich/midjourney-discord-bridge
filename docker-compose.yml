@@ -2,7 +2,7 @@ services:
   midjourney-bridge:
     build: .
     container_name: midjourney-bridge
-    restart: unless-stopped
+    restart: "no"
     environment:
       - TZ=Europe/London
       - DISCORD_TOKEN=${DISCORD_TOKEN}
