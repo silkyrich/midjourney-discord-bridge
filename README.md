@@ -145,9 +145,18 @@ All endpoints except `/api/health` and `/images/*` require authentication via `A
 
 ### Image Serving
 
+Images are served on **both** the REST API (port 3000) and MCP server (port 3002):
+
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/images/*` | No | Serve stored images (permanent URLs) |
+| `GET` | `/images/*` | No | Serve stored images (permanent URLs, never expire) |
+
+The `local_image_path` field in job responses maps directly to the URL path:
+
+```
+http://localhost:3000/images/{local_image_path}
+http://localhost:3002/images/{local_image_path}
+```
 
 ---
 
