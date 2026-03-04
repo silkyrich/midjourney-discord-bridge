@@ -5,7 +5,7 @@ import express from 'express';
 import { randomUUID } from 'node:crypto';
 import * as db from '../storage/database.js';
 import { resolve } from 'node:path';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync } from 'node:fs';
 
 export function createMcpServer(config, { queue, logger }) {
   const mcp = new McpServer(
@@ -292,9 +292,15 @@ export function createMcpServer(config, { queue, logger }) {
 /**
  * Create Express app for MCP transport.
  */
-export function createMcpApp(mcpServerFactory, logger) {
+export function createMcpApp(mcpServerFactory, config, logger) {
   const app = express();
   app.use(express.json());
+
+  // Serve downloaded images statically at /images/{local_image_path}
+  const rawImageDir = config.storage?.image_dir || '${HOME}/Pictures/midjourney';
+  const imageDir = resolve(rawImageDir.replace('${HOME}', process.env.HOME || '/app'));
+  if (!existsSync(imageDir)) mkdirSync(imageDir, { recursive: true });
+  app.use('/images', express.static(imageDir));
 
   // Map to track transports by session ID
   const transports = new Map();

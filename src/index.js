@@ -87,7 +87,7 @@ async function main() {
 
   // 9. Start MCP server
   const mcpServerFactory = () => createMcpServer(config, { queue, logger });
-  const mcpApp = createMcpApp(mcpServerFactory, logger);
+  const mcpApp = createMcpApp(mcpServerFactory, config, logger);
   const mcpHttpServer = await new Promise((resolve, reject) => {
     const server = mcpApp.listen(config.mcp.port, config.mcp.host, () => {
       logger.info(`MCP server listening on http://${config.mcp.host}:${config.mcp.port}/mcp`);
